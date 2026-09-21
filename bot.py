@@ -15,7 +15,8 @@ CHANNEL_ID = "@AnimeSoulDark"
 GROQ_API_KEY = "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"
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-groq_client = Groq(api_key=GROQ_API_KEY)
+# Добавили увеличенный таймаут (30 секунд) и повторные попытки для стабильности в облаке
+groq_client = Groq(api_key=GROQ_API_KEY, timeout=30.0, max_retries=3)
 
 STATE_FILE = "bot_state.json"
 HISTORY_FILE = "bot_history.json"
@@ -117,7 +118,6 @@ def generate_and_publish_post(custom_topic=None):
         post_text = completion.choices[0].message.content.strip()
         final_post = f"--- {rubric_name} ---\n\n{post_text}"
 
-        # Публикуем чистый текст без поиска картинок
         bot.send_message(CHANNEL_ID, final_post)
 
         state["total_published"] += 1
@@ -176,7 +176,6 @@ def cmd_reset(message):
     bot.reply_to(message, "🔄 Прогресс сброшен. План на 30 дней начат заново с Дня 1.")
 
 def run_scheduler():
-    # Автопостинг по расписанию
     schedule.every().day.at("12:00").do(generate_and_publish_post)
     schedule.every().day.at("18:00").do(generate_and_publish_post)
     schedule.every().day.at("21:00").do(generate_and_publish_post)
