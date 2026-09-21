@@ -6,14 +6,12 @@ import threading
 from datetime import datetime
 import telebot
 from groq import Groq
-from duckduckgo_search import DDGS
 import schedule
 
 # --- НАСТРОЙКИ ---
 TELEGRAM_BOT_TOKEN = "8974825461:AAGQ9YZz1rSJUBRfXBrT-AbsyW7m7ySrCeQ"
 CHANNEL_ID = "@AnimeSoulDark"
 
-# Ваш Groq API ключ
 GROQ_API_KEY = "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"
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
@@ -75,17 +73,6 @@ def save_history(history):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=4)
 
-def find_anime_image(query):
-    try:
-        short_query = query.split()[0] if query else "anime"
-        with DDGS() as ddgs:
-            results = list(ddgs.images(f"{short_query} anime wallpaper HD", max_results=2))
-            if results:
-                return results[0]['image']
-    except Exception as e:
-        print(f"Поиск картинок пропущен: {e}")
-    return None
-
 def generate_and_publish_post(custom_topic=None):
     try:
         state = load_state()
@@ -118,7 +105,6 @@ def generate_and_publish_post(custom_topic=None):
         6. Если есть сюжетные спойлеры, в самом начале напиши: СПОЙЛЕРЫ.
         """
 
-        # Запрос к Groq API (используем модель llama-3.3-70b-versatile)
         completion = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -131,16 +117,8 @@ def generate_and_publish_post(custom_topic=None):
         post_text = completion.choices[0].message.content.strip()
         final_post = f"--- {rubric_name} ---\n\n{post_text}"
 
-        image_url = find_anime_image(anime_topic)
-        time.sleep(1)
-
-        if image_url:
-            try:
-                bot.send_photo(CHANNEL_ID, photo=image_url, caption=final_post)
-            except Exception:
-                bot.send_message(CHANNEL_ID, final_post)
-        else:
-            bot.send_message(CHANNEL_ID, final_post)
+        # Публикуем чистый текст без поиска картинок
+        bot.send_message(CHANNEL_ID, final_post)
 
         state["total_published"] += 1
         save_state(state)
@@ -156,20 +134,24 @@ def generate_and_publish_post(custom_topic=None):
         return anime_topic
 
     except Exception as e:
-        print(f"[ОШИБКА] {e}")
+        print(f"[ОШИБКА генерации/публикации]: {e}")
+        try:
+            bot.send_message(CHANNEL_ID, f"⚠️ Ошибка публикации поста: {e}")
+        except:
+            pass
         return None
 
 @bot.message_handler(commands=['post'])
 def cmd_post(message):
     user_input = message.text.replace('/post', '').strip()
-    bot.reply_to(message, "AI Editor (Groq Cloud): Создаю качественный пост...")
+    bot.reply_to(message, "AI Editor (Groq): Генерирую пост...")
     topic = user_input if user_input else None
     published_topic = generate_and_publish_post(custom_topic=topic)
     
     if published_topic:
         bot.send_message(message.chat.id, f"Пост успешно опубликован в канале!\n\nТема: {published_topic}")
     else:
-        bot.send_message(message.chat.id, "Ошибка генерации.")
+        bot.send_message(message.chat.id, "Ошибка генерации. Проверьте логи хостинга.")
 
 @bot.message_handler(commands=['status'])
 def cmd_status(message):
@@ -179,7 +161,7 @@ def cmd_status(message):
     next_rubric, next_topic = CONTENT_PLAN_30_DAYS[state["current_day"] % len(CONTENT_PLAN_30_DAYS)]
     
     status_text = (
-        f"🤖 **Статус Cloud Agent (Groq):**\n\n"
+        f"🤖 **Статус Cloud Agent:**\n\n"
         f"📅 День по плану: **День {current_day} из 30**\n"
         f"📊 Опубликовано: **{total}**\n\n"
         f"🔜 **Следующая тема:**\n"
@@ -194,6 +176,7 @@ def cmd_reset(message):
     bot.reply_to(message, "🔄 Прогресс сброшен. План на 30 дней начат заново с Дня 1.")
 
 def run_scheduler():
+    # Автопостинг по расписанию
     schedule.every().day.at("12:00").do(generate_and_publish_post)
     schedule.every().day.at("18:00").do(generate_and_publish_post)
     schedule.every().day.at("21:00").do(generate_and_publish_post)
@@ -205,5 +188,5 @@ def run_scheduler():
 scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
 scheduler_thread.start()
 
-print("Cloud Anime Factory (Groq Edition) запущен!")
+print("Cloud Anime Factory (Text Only Edition) запущен!")
 bot.infinity_polling()
