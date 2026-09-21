@@ -1,0 +1,4 @@
+pytelegrambotapi
+groq
+duckduckgo-search
+schedule
